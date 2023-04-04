@@ -1,41 +1,43 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
 
-public abstract class IState<T>
+public abstract class State
 {
-    public T owner;
     public virtual void Enter() { }
     public virtual void Execute() { }
     public virtual void Exit() { }
 }
 
 
-
-public class StateMachine<T>
+public class StateMachine<T> where T : Enum
 {
-    IState<T> currentState;
+    Dictionary<T, State> _states = new();
+    State currentState;
 
-    public StateMachine(IState<T> defaultState)
+
+
+    public void RegisterState(T type, State state)
     {
-        SetState(defaultState);
+        if (_states.ContainsKey(type))
+            throw new Exception("Stato già presente: " + type);
+
+        _states.Add(type, state);
     }
 
     public void StateUpdate()
     {
-        if (currentState!=null)
-            currentState.Execute();
+            currentState?.Execute();
     }
 
-    public void SetState(IState<T> newState)
+    public void SetState(T type)
     {
-        if (currentState != null)
-            currentState.Exit();
+        currentState?.Exit();
 
-        currentState = newState;
+        currentState = _states[type];
 
-        if (currentState != null)
-            currentState.Enter();
+        currentState.Enter();
     }
 }

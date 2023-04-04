@@ -3,6 +3,15 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
+public enum PlayerStateType
+{
+    Idle,
+    Walk,
+    OnAir,
+    Attack
+}
+
+
 public class PlayerController : MonoBehaviour
 {
 
@@ -13,7 +22,7 @@ public class PlayerController : MonoBehaviour
     [SerializeField] LayerMask groundMask;
 
 
-    public StateMachine<PlayerController> stateMachine;
+    public StateMachine<PlayerStateType> StateMachine { get; } = new();
 
     Rigidbody2D body;
     Animator animator;
@@ -25,6 +34,7 @@ public class PlayerController : MonoBehaviour
     
     bool _isGrounded;
     public bool _isAttacking=false;
+     bool _isJumping;
 
     public bool readyToJump
     {
@@ -41,7 +51,13 @@ public class PlayerController : MonoBehaviour
     // Start is called before the first frame update
     void Start()
     {
-        stateMachine = new StateMachine<PlayerController>(new Idle(this));
+        StateMachine.RegisterState(PlayerStateType.Idle, new PlayerIdleState(this));
+        StateMachine.RegisterState(PlayerStateType.Walk, new PlayerWalkState(this));
+        StateMachine.RegisterState(PlayerStateType.OnAir, new PlayerOnAirState(this));
+        StateMachine.RegisterState(PlayerStateType.Attack, new PlayerAttackingState(this));
+
+        StateMachine.SetState(PlayerStateType.Idle);
+
         body = gameObject.GetComponent<Rigidbody2D>();
         animator = gameObject.GetComponent<Animator>();
     }
@@ -49,7 +65,7 @@ public class PlayerController : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
-        stateMachine.StateUpdate();
+        StateMachine.StateUpdate();
     }
 
     private void FixedUpdate()
@@ -97,7 +113,7 @@ public class PlayerController : MonoBehaviour
         }
         else
         {
-            vertical = -transform.up.y - body.gravityScale;
+            vertical = Vector2.down.y - 3;
         }
 
 
@@ -106,133 +122,140 @@ public class PlayerController : MonoBehaviour
     }
 
 
-    class Idle : IState<PlayerController>
+    class PlayerIdleState : State
     {
-        public Idle(PlayerController owner)
+        PlayerController playerController;
+        public PlayerIdleState(PlayerController owner)
         {
-            this.owner = owner;
+            playerController = owner;
         }
 
         public override void Enter()
         {
-            owner._canMove = true;
-            owner._canJump = true;
-            owner._canAttack = true;
+            playerController._canMove = true;
+            playerController._canJump = true;
+            playerController._canAttack = true;
         }
 
         public override void Execute()
         {
-            owner.HandleMovements();
-            owner.HandleAttack();
+            playerController.HandleMovements();
+            playerController.HandleAttack();
 
-            if (owner.body.velocity.x > 0.3)
+            if (Mathf.Abs(playerController.body.velocity.x) > 0.05)
             {
-                owner.stateMachine = new StateMachine<PlayerController>(new Moving(owner));
+                playerController.StateMachine.SetState(PlayerStateType.Walk);
             }
 
-            if (!owner._isGrounded)
+            if (!playerController._isGrounded)
             {
-                owner.stateMachine = new StateMachine<PlayerController>(new OnAir(owner));
+                playerController.StateMachine.SetState(PlayerStateType.OnAir);
             }
 
-            if (owner._isAttacking)
+            if (playerController._isAttacking)
             {
-                owner.stateMachine = new StateMachine<PlayerController>(new Attacking(owner));
+                playerController.StateMachine.SetState(PlayerStateType.Attack);
             }
 
         }
 
     }
 
-    class Moving : IState<PlayerController>
+    class PlayerWalkState : State
     {
-        
-        public Moving(PlayerController owner)
+        PlayerController playerController;
+
+        public PlayerWalkState(PlayerController owner)
         {
-            this.owner = owner;
+            playerController = owner;
         }
 
         public override void Enter()
         {
-            owner._canJump = true;
-            owner._canAttack = false;
-            owner._canMove = true;
+            playerController._canJump = true;
+            playerController._canAttack = true;
+            playerController._canMove = true;
         }
 
         public override void Execute()
         {
-            owner.HandleMovements();
-            owner.HandleAttack();
+            playerController.HandleMovements();
+            playerController.HandleAttack();
 
-            if (owner.body.velocity.x < 0.3)
+            if (Mathf.Abs(playerController.body.velocity.x) < 0.05)
             {
-                owner.stateMachine = new StateMachine<PlayerController>(new Idle(owner));
+                playerController.StateMachine.SetState(PlayerStateType.Idle);
             }
 
-            if (!owner._isGrounded)
+            if (!playerController._isGrounded)
             {
-                owner.stateMachine = new StateMachine<PlayerController>(new OnAir(owner));
+                playerController.StateMachine.SetState(PlayerStateType.OnAir);
             }
 
-            
+            if (playerController._isAttacking)
+            {
+                playerController.StateMachine.SetState(PlayerStateType.Attack);
+            }
 
         }
 
     }
 
-    class OnAir : IState<PlayerController>
+    class PlayerOnAirState : State
     {
-        public OnAir(PlayerController owner)
+        PlayerController playerController;
+        public PlayerOnAirState(PlayerController owner)
         {
-            this.owner = owner;
+            playerController = owner;
         }
 
         public override void Enter()
         {
-            owner._canJump = false;
-            owner._canAttack = false;
-            owner._canMove = false;
+            playerController._canJump = false;
+            playerController._canAttack = false;
+            playerController._canMove = false;
         }
 
         public override void Execute()
         {
-            owner.HandleMovements();
+            playerController.HandleMovements();
 
-            if (owner._isGrounded)
+            if (playerController._isGrounded)
             {
-                owner.stateMachine = new StateMachine<PlayerController>(new Idle(owner));
+                playerController.StateMachine.SetState(PlayerStateType.Idle);
             }
         }
 
     }
 
-    class Attacking : IState<PlayerController>
+
+
+    class PlayerAttackingState : State
     {
-        public Attacking(PlayerController owner)
+        PlayerController playerController;
+        public PlayerAttackingState(PlayerController owner)
         {
-            this.owner = owner;
+            playerController = owner;
         }
 
         public override void Enter()
         {
-            owner._canJump = false;
-            owner._canAttack = true;
-            owner._canMove = false;
+            playerController._canJump = false;
+            playerController._canAttack = true;
+            playerController._canMove = false;
 
-            owner.Attack();
+            playerController.Attack();
         }
 
         public override void Execute()
         {
-            owner.HandleMovements();
+            playerController.HandleMovements();
 
-            if (!owner._isAttacking)
+            if (!playerController._isAttacking)
             {
-                owner.stateMachine = new StateMachine<PlayerController>(new Idle(owner));
+                playerController.StateMachine.SetState(PlayerStateType.Idle);
             }
         }
-
-        
 
     }
 
